@@ -40,11 +40,11 @@
 
 static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContext *sl)
 {
-    const int mb_x    = sl->mb_x;
+    const int mb_x    = sl->mb_x;//序号：x（行）和y（列）
     const int mb_y    = sl->mb_y;
-    const int mb_xy   = sl->mb_xy;
+    const int mb_xy   = sl->mb_xy;//宏块序号 mb_xy = mb_x + mb_y*mb_stride
     const int mb_type = h->cur_pic.mb_type[mb_xy];
-    uint8_t *dest_y, *dest_cb, *dest_cr;
+    uint8_t *dest_y, *dest_cb, *dest_cr;//这三个变量存储最后处理完成的YUV像素值
     int linesize, uvlinesize /*dct_offset*/;
     int i, j;
     const int *block_offset = &h->block_offset[0];
@@ -52,7 +52,7 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
     void (*idct_add)(uint8_t *dst, int16_t *block, int stride);
     const int block_h   = 16 >> h->chroma_y_shift;
     const int chroma422 = CHROMA422(h);
-
+    //分别对应AVFrame的data[0]，data[1]，data[2]
     dest_y  = h->cur_pic.f->data[0] + ((mb_x << PIXEL_SHIFT)     + mb_y * sl->linesize)  * 16;
     dest_cb = h->cur_pic.f->data[1] +  (mb_x << PIXEL_SHIFT) * 8 + mb_y * sl->uvlinesize * block_h;
     dest_cr = h->cur_pic.f->data[2] +  (mb_x << PIXEL_SHIFT) * 8 + mb_y * sl->uvlinesize * block_h;
@@ -62,6 +62,51 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
 
     h->list_counts[mb_xy] = sl->list_count;
 
+    // Check if this macroblock should be skipped
+    int should_skip_macroblock;//1 skip this macroblock
+    if(sl->slice_type_nos == AV_PICTURE_TYPE_B){
+        if(rand()%2==0){
+            should_skip_macroblock = 1;
+        }
+        else should_skip_macroblock = 0;
+    }
+    /*else if(sl->slice_type_nos == AV_PICTURE_TYPE_P){
+        if(rand()%4==0){
+            should_skip_macroblock = 1;
+        }
+        else should_skip_macroblock = 0;
+    }*/
+    else{//AV_PICTURE_TYPE_I||P
+        should_skip_macroblock = 0;
+    }
+    //write the result into file
+    //char filename[20];
+    //sprintf(filename, "%s%04d%s", "mask_lists/mask_list", h->cur_pic_ptr->frame_num,".txt");
+    //FILE *file = fopen(filename, "a");
+    //if (file != NULL) {
+    //    fprintf(file, "%d %d %d\n",mb_x,mb_y,should_skip_macroblock);
+    //    fclose(file);
+    //}
+    //set the skipped macroblock into black
+    if (should_skip_macroblock) {
+        // Assuming 8-bit YUV 420 format for simplicity. Adjust for other formats or bit depths.
+        int linesize = sl->linesize;
+        int uvlinesize = sl->uvlinesize;
+
+        // Fill the macroblock with black. Y=0, U=128, V=128 for YUV420
+        for (int i = 0; i < 16; i++) { // Luma
+            memset(dest_y + i * linesize, 0, 16);
+        }
+        for (int i = 0; i < 8; i++) { // Chroma
+            
+           
+            memset(dest_cb + i * uvlinesize, 128, 8);
+            memset(dest_cr + i * uvlinesize, 128, 8);
+        }
+        return; // Skip the rest of the decoding process for this macroblock
+    }
+
+    //if SIMPLE==1 不会执行
     if (!SIMPLE && MB_FIELD(sl)) {
         linesize     = sl->mb_linesize = sl->linesize * 2;
         uvlinesize   = sl->mb_uvlinesize = sl->uvlinesize * 2;
@@ -150,7 +195,7 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
             }
         }
     } else {
-        if (IS_INTRA(mb_type)) {
+        if (IS_INTRA(mb_type)) { //Intra类型, Intra4x4或者Intra16x16
             if (sl->deblocking_filter)
                 xchg_mb_border(h, sl, dest_y, dest_cb, dest_cr, linesize,
                                uvlinesize, 1, 0, SIMPLE, PIXEL_SHIFT);
@@ -162,13 +207,13 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
 
             hl_decode_mb_predict_luma(h, sl, mb_type, SIMPLE,
                                       transform_bypass, PIXEL_SHIFT,
-                                      block_offset, linesize, dest_y, 0);
+                                      block_offset, linesize, dest_y, 0);//帧内预测-亮度
 
             if (sl->deblocking_filter)
                 xchg_mb_border(h, sl, dest_y, dest_cb, dest_cr, linesize,
                                uvlinesize, 0, 0, SIMPLE, PIXEL_SHIFT);
-        } else {
-            if (chroma422) {
+        } else { //Inter类型
+            if (chroma422) {//运动补偿
                 FUNC(hl_motion_422)(h, sl, dest_y, dest_cb, dest_cr,
                               h->h264qpel.put_h264_qpel_pixels_tab,
                               h->h264chroma.put_h264_chroma_pixels_tab,
@@ -177,6 +222,10 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
                               h->h264dsp.weight_h264_pixels_tab,
                               h->h264dsp.biweight_h264_pixels_tab);
             } else {
+                //“*_put”处理单向预测，“*_avg”处理双向预测，“weight”处理加权预测
+            	//h->qpel_put[16]包含了单向预测的四分之一像素运动补偿所有样点处理的函数
+            	//两个像素之间横向的点（内插点和原始的点）有4个，纵向的点有4个，组合起来一共16个
+            	//h->qpel_avg[16]情况也类似
                 FUNC(hl_motion_420)(h, sl, dest_y, dest_cb, dest_cr,
                               h->h264qpel.put_h264_qpel_pixels_tab,
                               h->h264chroma.put_h264_chroma_pixels_tab,
@@ -186,7 +235,7 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
                               h->h264dsp.biweight_h264_pixels_tab);
             }
         }
-
+        //亮度的IDCT
         hl_decode_mb_idct_luma(h, sl, mb_type, SIMPLE, transform_bypass,
                                PIXEL_SHIFT, block_offset, linesize, dest_y, 0);
 

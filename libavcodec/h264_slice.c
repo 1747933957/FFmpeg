@@ -2603,13 +2603,6 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                 return AVERROR_INVALIDDATA;
             }
 
-            // sun changed 04/04/2024
-            if (sl->mb_x >h->mb_width/2 && sl->mb_y >h->mb_height/2)//out of the mask range
-                goto MY_SKIP1;
-#undef  SIMPLE
-#define SIMPLE 1
-MY_SKIP1:
-
             ret = ff_h264_decode_mb_cabac(h, sl);
 
             if (ret >= 0)
@@ -2625,9 +2618,6 @@ MY_SKIP1:
                     ff_h264_hl_decode_mb(h, sl);
                 sl->mb_y--;
             }
-// sun changed 04/04/2024
-#undef  SIMPLE
-#define SIMPLE 0
             eos = get_cabac_terminate(&sl->cabac);
 
             if ((h->workaround_bugs & FF_BUG_TRUNCATED) &&
@@ -2649,12 +2639,12 @@ MY_SKIP1:
                              sl->mb_y, ER_MB_ERROR);
                 return AVERROR_INVALIDDATA;
             }
-
+            // shift right
             if (++sl->mb_x >= h->mb_width) {
                 loop_filter(h, sl, lf_x_start, sl->mb_x);
                 sl->mb_x = lf_x_start = 0;
                 decode_finish_row(h, sl);
-                ++sl->mb_y;
+                ++sl->mb_y;// shift down
                 if (FIELD_OR_MBAFF_PICTURE(h)) {
                     ++sl->mb_y;
                     if (FRAME_MBAFF(h) && sl->mb_y < h->mb_height)
@@ -2662,7 +2652,7 @@ MY_SKIP1:
                 }
             }
 
-            if (eos || sl->mb_y >= h->mb_height) {
+            if (eos || sl->mb_y >= h->mb_height) { // this frame over
                 ff_tlog(h->avctx, "slice end %d %d\n",
                         get_bits_count(&sl->gb), sl->gb.size_in_bits);
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x - 1,
@@ -2683,12 +2673,6 @@ MY_SKIP1:
                              sl->mb_y, ER_MB_ERROR);
                 return AVERROR_INVALIDDATA;
             }
-            // sun changed 04/04/2024
-            if (sl->mb_x >h->mb_width/2 && sl->mb_y >h->mb_height/2)//out of the mask range
-                goto MY_SKIP2;
-#undef  SIMPLE
-#define SIMPLE 1
-MY_SKIP2:
 
             ret = ff_h264_decode_mb_cavlc(h, sl);
 
@@ -2704,9 +2688,6 @@ MY_SKIP2:
                     ff_h264_hl_decode_mb(h, sl);
                 sl->mb_y--;
             }
-// sun changed 04/04/2024
-#undef  SIMPLE
-#define SIMPLE 0
 
             if (ret < 0) {
                 av_log(h->avctx, AV_LOG_ERROR,
