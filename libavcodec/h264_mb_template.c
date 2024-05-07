@@ -62,49 +62,6 @@ static av_noinline void FUNC(hl_decode_mb)(const H264Context *h, H264SliceContex
 
     h->list_counts[mb_xy] = sl->list_count;
 
-    // Check if this macroblock should be skipped
-    int should_skip_macroblock;//1 skip this macroblock
-    if(sl->slice_type_nos == AV_PICTURE_TYPE_B){
-        if(rand()%2==0){
-            should_skip_macroblock = 1;
-        }
-        else should_skip_macroblock = 0;
-    }
-    /*else if(sl->slice_type_nos == AV_PICTURE_TYPE_P){
-        if(rand()%4==0){
-            should_skip_macroblock = 1;
-        }
-        else should_skip_macroblock = 0;
-    }*/
-    else{//AV_PICTURE_TYPE_I||P
-        should_skip_macroblock = 0;
-    }
-    //write the result into file
-    //char filename[20];
-    //sprintf(filename, "%s%04d%s", "mask_lists/mask_list", h->cur_pic_ptr->frame_num,".txt");
-    //FILE *file = fopen(filename, "a");
-    //if (file != NULL) {
-    //    fprintf(file, "%d %d %d\n",mb_x,mb_y,should_skip_macroblock);
-    //    fclose(file);
-    //}
-    //set the skipped macroblock into black
-    if (should_skip_macroblock) {
-        // Assuming 8-bit YUV 420 format for simplicity. Adjust for other formats or bit depths.
-        int linesize = sl->linesize;
-        int uvlinesize = sl->uvlinesize;
-
-        // Fill the macroblock with black. Y=0, U=128, V=128 for YUV420
-        for (int i = 0; i < 16; i++) { // Luma
-            memset(dest_y + i * linesize, 0, 16);
-        }
-        for (int i = 0; i < 8; i++) { // Chroma
-            
-           
-            memset(dest_cb + i * uvlinesize, 128, 8);
-            memset(dest_cr + i * uvlinesize, 128, 8);
-        }
-        return; // Skip the rest of the decoding process for this macroblock
-    }
 
     //if SIMPLE==1 不会执行
     if (!SIMPLE && MB_FIELD(sl)) {

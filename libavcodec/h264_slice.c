@@ -2545,10 +2545,15 @@ static void er_add_slice(H264SliceContext *sl,
     }
 }
 
+/*static void decode_one_macroblock(const H264Context *h, H264SliceContext *sl)
+{
+
+}*/
+
 static int decode_slice(struct AVCodecContext *avctx, void *arg)
 {
     H264SliceContext *sl = arg;
-    const H264Context *h = sl->h264;
+    H264Context *h = sl->h264;
     int lf_x_start = sl->mb_x;
     int orig_deblock = sl->deblocking_filter;
     int ret;
@@ -2595,14 +2600,50 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
 
         for (;;) {
             int ret, eos;
-            if (sl->mb_x + sl->mb_y * h->mb_width >= sl->next_slice_idx) {
+            int index = sl->mb_x + sl->mb_y * h->mb_width;
+            if (index >= sl->next_slice_idx) {
                 av_log(h->avctx, AV_LOG_ERROR, "Slice overlaps with next at %d\n",
                        sl->next_slice_idx);
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
                 return AVERROR_INVALIDDATA;
             }
+            int should_skip_macroblock;//1 skip this macroblock
+            if(sl->slice_type_nos == AV_PICTURE_TYPE_B){
+                if(rand()%2==0){
+                    should_skip_macroblock = 1;
+                }
+                else should_skip_macroblock = 0;
+            }
+            else{//AV_PICTURE_TYPE_I||P
+                should_skip_macroblock = 0;
+            }
+            if(should_skip_macroblock==1){
+                const int mb_x    = sl->mb_x;//序号：x（行）和y（列）
+                const int mb_y    = sl->mb_y;
+                const int mb_xy   = sl->mb_xy;//宏块序号 mb_xy = mb_x + mb_y*mb_stride
+                uint8_t *dest_y, *dest_cb, *dest_cr;//这三个变量存储最后处理完成的YUV像素值
+                const int block_h   = 16 >> h->chroma_y_shift;
+                //分别对应AVFrame的data[0]，data[1]，data[2]
+                dest_y  = h->cur_pic.f->data[0] + ((mb_x << h->pixel_shift)     + mb_y * sl->linesize)  * 16;
+                dest_cb = h->cur_pic.f->data[1] +  (mb_x << h->pixel_shift) * 8 + mb_y * sl->uvlinesize * block_h;
+                dest_cr = h->cur_pic.f->data[2] +  (mb_x << h->pixel_shift) * 8 + mb_y * sl->uvlinesize * block_h;
+                // Assuming 8-bit YUV 420 format for simplicity. Adjust for other formats or bit depths.
+                int linesize = sl->linesize;
+                int uvlinesize = sl->uvlinesize;
 
+                // Fill the macroblock with black. Y=0, U=128, V=128 for YUV420
+                for (int i = 0; i < 16; i++) { // Luma
+                    memset(dest_y + i * linesize, 0, 16);
+                }
+                for (int i = 0; i < 8; i++) { // Chroma
+                        
+                    memset(dest_cb + i * uvlinesize, 128, 8);
+                    memset(dest_cr + i * uvlinesize, 128, 8);
+                }
+            }
+            else{
+            //h->skipped_mb[i]h->mb_height*h->mb_width
             ret = ff_h264_decode_mb_cabac(h, sl);
 
             if (ret >= 0)
@@ -2638,12 +2679,12 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
                 return AVERROR_INVALIDDATA;
-            }
+            }}
             // shift right
             if (++sl->mb_x >= h->mb_width) {
                 loop_filter(h, sl, lf_x_start, sl->mb_x);
                 sl->mb_x = lf_x_start = 0;
-                decode_finish_row(h, sl);
+                //decode_finish_row(h, sl);
                 ++sl->mb_y;// shift down
                 if (FIELD_OR_MBAFF_PICTURE(h)) {
                     ++sl->mb_y;
@@ -2673,7 +2714,41 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                              sl->mb_y, ER_MB_ERROR);
                 return AVERROR_INVALIDDATA;
             }
+            int should_skip_macroblock;//1 skip this macroblock
+            if(sl->slice_type_nos == AV_PICTURE_TYPE_B){
+                if(rand()%2==0){
+                    should_skip_macroblock = 1;
+                }
+                else should_skip_macroblock = 0;
+            }
+            else{//AV_PICTURE_TYPE_I||P
+                should_skip_macroblock = 0;
+            }
+            if(should_skip_macroblock==1){
+                const int mb_x    = sl->mb_x;//序号：x（行）和y（列）
+                const int mb_y    = sl->mb_y;
+                const int mb_xy   = sl->mb_xy;//宏块序号 mb_xy = mb_x + mb_y*mb_stride
+                uint8_t *dest_y, *dest_cb, *dest_cr;//这三个变量存储最后处理完成的YUV像素值
+                const int block_h   = 16 >> h->chroma_y_shift;
+                //分别对应AVFrame的data[0]，data[1]，data[2]
+                dest_y  = h->cur_pic.f->data[0] + ((mb_x << h->pixel_shift)     + mb_y * sl->linesize)  * 16;
+                dest_cb = h->cur_pic.f->data[1] +  (mb_x << h->pixel_shift) * 8 + mb_y * sl->uvlinesize * block_h;
+                dest_cr = h->cur_pic.f->data[2] +  (mb_x << h->pixel_shift) * 8 + mb_y * sl->uvlinesize * block_h;
+                // Assuming 8-bit YUV 420 format for simplicity. Adjust for other formats or bit depths.
+                int linesize = sl->linesize;
+                int uvlinesize = sl->uvlinesize;
 
+                // Fill the macroblock with black. Y=0, U=128, V=128 for YUV420
+                for (int i = 0; i < 16; i++) { // Luma
+                    memset(dest_y + i * linesize, 0, 16);
+                }
+                for (int i = 0; i < 8; i++) { // Chroma
+                        
+                    memset(dest_cb + i * uvlinesize, 128, 8);
+                    memset(dest_cr + i * uvlinesize, 128, 8);
+                }
+            }
+            else{
             ret = ff_h264_decode_mb_cavlc(h, sl);
 
             if (ret >= 0)
@@ -2695,12 +2770,12 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                 er_add_slice(sl, sl->resync_mb_x, sl->resync_mb_y, sl->mb_x,
                              sl->mb_y, ER_MB_ERROR);
                 return ret;
-            }
+            }}
 
             if (++sl->mb_x >= h->mb_width) {
                 loop_filter(h, sl, lf_x_start, sl->mb_x);
                 sl->mb_x = lf_x_start = 0;
-                decode_finish_row(h, sl);
+                //decode_finish_row(h, sl);
                 ++sl->mb_y;
                 if (FIELD_OR_MBAFF_PICTURE(h)) {
                     ++sl->mb_y;

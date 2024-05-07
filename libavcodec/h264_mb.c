@@ -635,6 +635,7 @@ static av_always_inline void hl_decode_mb_predict_luma(const H264Context *h,
                 idct_add    = h->h264dsp.h264_idct8_add;
             }
             for (i = 0; i < 16; i += 4) {
+                //Intra8x8帧内预测：16x16 宏块被划分为4个8x8子块
                 uint8_t *const ptr = dest_y + block_offset[i];
                 const int dir      = sl->intra4x4_pred_mode_cache[scan8[i]];
                 if (transform_bypass && h->ps.sps->profile_idc == 244 && dir <= 1) {
@@ -657,6 +658,7 @@ static av_always_inline void hl_decode_mb_predict_luma(const H264Context *h,
                 }
             }
         } else {
+            //Intra4x4帧内预测：16x16 宏块被划分为16个4x4子块
             if (transform_bypass) {
                 idct_dc_add  =
                 idct_add     = h->h264dsp.h264_add_pixels4_clear;
@@ -689,7 +691,7 @@ static av_always_inline void hl_decode_mb_predict_luma(const H264Context *h,
                             topright = ptr + (4 << pixel_shift) - linesize;
                     } else
                         topright = NULL;
-
+                    //汇编函数：4x4帧内预测（9种方式：Vertical，Horizontal，DC，Plane等等。。。）
                     h->hpc.pred4x4[dir](ptr, topright, linesize);
                     nnz = sl->non_zero_count_cache[scan8[i + p * 16]];
                     if (nnz) {
@@ -702,6 +704,7 @@ static av_always_inline void hl_decode_mb_predict_luma(const H264Context *h,
             }
         }
     } else {
+        //汇编函数：16x16帧内预测（4种方式：Vertical，Horizontal，DC，Plane）
         h->hpc.pred16x16[sl->intra16x16_pred_mode](dest_y, linesize);
         if (sl->non_zero_count_cache[scan8[LUMA_DC_BLOCK_INDEX + p]]) {
             if (!transform_bypass)
